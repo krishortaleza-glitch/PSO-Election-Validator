@@ -44,7 +44,7 @@ def extract_99b_election(zone):
         return "OPT-OUT"
 
     elections = [
-        ("Enhanced Margin", re.compile(r"(?<![A-Z])ENHANCED(?:\s*\d+)?(?![A-Z])", re.I)),
+        ("Enhanced Margin", re.compile(r"(?<![A-Z])ENHANCED(?:\s*[_-]?\s*MARGIN|\s*\d+)?(?![A-Z])", re.I)),
         ("Blended", re.compile(r"(?<![A-Z])BLENDED(?![A-Z])", re.I)),
         ("Reserve", re.compile(r"(?<![A-Z])RESERVE(?![A-Z])", re.I)),
         ("Balanced", re.compile(r"(?<![A-Z])BALANCED(?![A-Z])", re.I)),
