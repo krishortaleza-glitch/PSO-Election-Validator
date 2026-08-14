@@ -7,7 +7,7 @@ import streamlit as st
 
 st.set_page_config(page_title="PSO Election Validator", page_icon="✅", layout="wide")
 
-APP_VERSION = "v1.4 — State-Aware Zone Election Extraction"
+APP_VERSION = "v1.5 — Simplified Interface"
 
 
 def clean_store(value):
@@ -287,66 +287,23 @@ def export_excel(result):
 st.title("PSO Election Validator")
 st.caption(APP_VERSION)
 
-st.markdown(
-    """
-Compare the **99 Bottles store election** against the **supplier Election Report**.
-
-**Matching key:** Store number
-
-**Output population:** Only stores from the **Store List CSV** are included.  
-Stores that exist only in the Election Report are ignored.
-
-**99B election extraction:** If the Zone contains a state, the first recognized
-election after that state is used. If there is no state, the first recognized
-election in the Zone is used.
-
-**Duplicate Election Report rows:** Duplicate rows for the same store are collapsed and do not create a separate status.
-"""
-)
+st.caption("Compare 99B elections against the supplier Election Report.")
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("1. Store List")
-    st.caption("CSV ONLY — one file / one dataset")
     store_file = st.file_uploader(
-        "Upload Store List CSV",
+        "Store List CSV",
         type=["csv"],
         key="store_csv",
     )
 
 with col2:
-    st.subheader("2. Election Report")
-    st.caption("XLSX ONLY — header starts on Excel row 5")
     report_file = st.file_uploader(
-        "Upload Election Report XLSX",
+        "Election Report XLSX",
         type=["xlsx"],
         key="report_xlsx",
     )
-
-st.divider()
-
-st.markdown(
-    """
-### Expected columns
-
-**Store List CSV**
-- Column A = Store
-- **Column B = Zone**
-- State column, if included, is used for the output
-- Election is extracted from Column B
-
-**Election Report XLSX**
-- Header = Excel row 5
-- **Column D = Store source** → numbers only
-- **Column E = State**
-- **Column F = Election**
-
-### Output
-
-`State | Store | 99B Election | Report Election | Status`
-"""
-)
 
 if store_file and report_file:
     try:
@@ -359,28 +316,15 @@ if store_file and report_file:
 
         counts = result["Status"].value_counts()
 
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3 = st.columns(3)
         c1.metric("Stores Checked", f"{len(result):,}")
         c2.metric("Matches", f"{counts.get('MATCH', 0):,}")
-        c3.metric("Mismatches", f"{counts.get('MISMATCH', 0):,}")
-        c4.metric(
-            "Missing",
-            f"{counts.get('MISSING IN 99B', 0) + counts.get('MISSING IN REPORT', 0):,}",
-        )
+        c3.metric("Missing in Report", f"{counts.get('MISSING IN REPORT', 0):,}")
 
         st.subheader("Validation Results")
 
-        statuses = sorted(result["Status"].unique())
-        selected = st.multiselect(
-            "Filter Status",
-            statuses,
-            default=statuses,
-        )
-
-        filtered = result[result["Status"].isin(selected)]
-
         st.dataframe(
-            filtered,
+            result,
             use_container_width=True,
             hide_index=True,
         )
