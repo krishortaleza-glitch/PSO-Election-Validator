@@ -7,6 +7,8 @@ import streamlit as st
 
 st.set_page_config(page_title="PSO Election Validator", page_icon="✅", layout="wide")
 
+
+
 def clean_store(value):
     if pd.isna(value):
         return ""
@@ -282,7 +284,6 @@ def export_excel(result):
 # UI
 # ============================================================
 st.title("PSO Election Validator")
-st.caption(APP_VERSION)
 
 st.caption("Compare 99B elections against the supplier Election Report.")
 
