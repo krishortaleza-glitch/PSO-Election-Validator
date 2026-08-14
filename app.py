@@ -170,11 +170,11 @@ def read_election_report_xlsx(uploaded_file):
         )
     )
 
-    grouped["Multiple Report Elections"] = grouped["Elections"].apply(
-        lambda x: len(x) > 1
-    )
+    # Duplicate store rows are collapsed. Since duplicate rows in the
+    # supplier report do not represent a separate validation result,
+    # use the first election value for the store.
     grouped["Report Election"] = grouped["Elections"].apply(
-        lambda x: x[0] if len(x) == 1 else " / ".join(x)
+        lambda x: x[0] if x else ""
     )
 
     return grouped.drop(columns=["Elections"])
@@ -201,9 +201,6 @@ def validate(portal, report):
     def status(row):
         if row.get("Multiple Elections", False):
             return "MULTIPLE 99B ELECTIONS"
-
-        if row.get("Multiple Report Elections", False):
-            return "MULTIPLE REPORT ELECTIONS"
 
         p = row["99B Election"]
         r = row["Report Election"]
@@ -258,6 +255,8 @@ Compare the **99 Bottles store election** against the **supplier Election Report
 
 **Output population:** Only stores from the **Store List CSV** are included.  
 Stores that exist only in the Election Report are ignored.
+
+**Duplicate Election Report rows:** Duplicate rows for the same store are collapsed and do not create a separate status.
 """
 )
 
