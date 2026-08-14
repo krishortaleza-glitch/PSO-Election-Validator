@@ -1,5 +1,6 @@
 
 import re
+import csv
 from io import BytesIO
 
 import pandas as pd
@@ -101,44 +102,68 @@ def normalize_election(value):
 # ============================================================
 # STORE LIST — CSV ONLY
 # ============================================================
+def extract_state_from_zone(zone):
+    """Return the first valid US state abbreviation found in the zone."""
+    if pd.isna(zone):
+        return ""
+
+    z = str(zone).strip().upper()
+    states = {
+        "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN",
+        "IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV",
+        "NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN",
+        "TX","UT","VT","VA","WA","WV","WI","WY","DC"
+    }
+
+    for match in re.finditer(r"(?<![A-Z])([A-Z]{2})(?![A-Z])", z):
+        if match.group(1) in states:
+            return match.group(1)
+
+    return ""
+
+
 def read_store_list_csv(uploaded_file):
     """
     Store List is CSV only.
-    Column B = Zone.
-    The first column is the Store.
-    A State column is used if present.
+
+    The validator only uses physical CSV Column A (Store) and Column B (Zone).
+    The uploaded Store List may contain an unquoted comma in a later field,
+    so pandas can shift those later columns. Reading the raw first two fields
+    keeps Store and Zone aligned correctly.
     """
-    df = pd.read_csv(uploaded_file, dtype=str)
+    uploaded_file.seek(0)
+    raw = uploaded_file.read()
 
-    if df.shape[1] < 2:
-        raise ValueError("Store List CSV must contain at least columns A and B.")
+    if isinstance(raw, str):
+        raw = raw.encode("utf-8")
 
-    store_col = df.columns[0]
-    zone_col = df.columns[1]
+    text = raw.decode("utf-8-sig", errors="replace")
+    rows = csv.reader(text.splitlines())
 
-    state_col = next(
-        (c for c in df.columns if str(c).strip().lower() == "state"),
-        None,
-    )
+    header = next(rows, None)
+    if not header or len(header) < 2:
+        raise ValueError("Store List CSV must contain Column A = Store and Column B = Zone.")
 
     records = []
 
-    for _, row in df.iterrows():
-        store = clean_store(row.iloc[0])
-        if not store:
+    for row in rows:
+        if len(row) < 2:
             continue
 
-        zone = row.iloc[1]
-        election = extract_99b_election(zone)
+        store = clean_store(row[0])
+        zone = row[1].strip() if row[1] else ""
 
-        state = ""
-        if state_col is not None and pd.notna(row[state_col]):
-            state = str(row[state_col]).strip().upper()
+        if not store or not zone:
+            continue
+
+        election = extract_99b_election(zone)
+        if not election:
+            continue
 
         records.append(
             {
                 "Store": store,
-                "State": state,
+                "State": extract_state_from_zone(zone),
                 "99B Election": election,
             }
         )
@@ -149,8 +174,6 @@ def read_store_list_csv(uploaded_file):
         return pd.DataFrame(
             columns=["Store", "State", "99B Election", "Multiple Elections"]
         )
-
-    portal = portal[portal["99B Election"] != ""].copy()
 
     grouped = (
         portal.groupby("Store", as_index=False)
@@ -308,6 +331,13 @@ if store_file and report_file:
         with st.spinner("Validating elections..."):
             portal = read_store_list_csv(store_file)
             report = read_election_report_xlsx(report_file)
+
+            if portal.empty:
+                raise ValueError(
+                    "No valid stores were found in the Store List CSV. "
+                    "Column A must be Store and Column B must be Zone."
+                )
+
             result = validate(portal, report)
 
         st.success("Validation complete.")
