@@ -1,3 +1,4 @@
+
 import re
 from io import BytesIO
 
@@ -6,7 +7,7 @@ import streamlit as st
 
 st.set_page_config(page_title="PSO Election Validator", page_icon="✅", layout="wide")
 
-APP_VERSION = "v1.1 — Store List CSV / Election Report XLSX"
+APP_VERSION = "v1.2 — Store List Controls Output Population"
 
 
 def clean_store(value):
@@ -180,10 +181,14 @@ def read_election_report_xlsx(uploaded_file):
 
 
 def validate(portal, report):
+    # IMPORTANT:
+    # The Store List is the controlling population.
+    # Only stores present in the Store List should appear in the output.
+    # Stores that exist only in the Election Report are excluded.
     result = portal.merge(
         report,
         on="Store",
-        how="outer",
+        how="left",
         suffixes=("_99B", "_Report"),
     )
 
@@ -250,6 +255,9 @@ st.markdown(
 Compare the **99 Bottles store election** against the **supplier Election Report**.
 
 **Matching key:** Store number
+
+**Output population:** Only stores from the **Store List CSV** are included.  
+Stores that exist only in the Election Report are ignored.
 """
 )
 
