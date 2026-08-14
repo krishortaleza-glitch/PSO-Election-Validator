@@ -18,20 +18,22 @@ def clean_store(value):
 
 def extract_99b_election(zone):
     """
-    Extract the 99B Election from Store List Column B (Zone).
+    Extract the 99B election from the Zone.
 
-    Rules:
-      1. If the zone contains a state abbreviation, the election is the
-         first recognized election designation appearing AFTER the first
-         state abbreviation.
-      2. If there is no state abbreviation, use the first recognized election
-         designation anywhere in the zone.
-      3. Later election-like words are ignored.
+    The Store List contains many naming styles, so the election is identified
+    by the first recognized election token AFTER the first valid state.
+    If no state exists, the first recognized election token is used.
 
-    This prevents examples such as:
-        MO Blended_EDLP Balanced_StL
-    from being incorrectly classified as Balanced.
-    The result is Blended.
+    Supported naming variations include:
+      - Enhanced, Enhanced0, EnhancedMargin, Enhanced_Margin, EnhanPrCam65
+      - Blended / Blended...
+      - Reserve / Reserve...
+      - Balanced / Bal...
+      - Margin
+      - CVF
+
+    Later election-like terms are ignored. Example:
+      MO Blended_EDLP Balanced_StL -> Blended
     """
     if pd.isna(zone):
         return ""
@@ -40,41 +42,52 @@ def extract_99b_election(zone):
     if not z:
         return ""
 
-    if re.search(r"\bNO[\s_-]*(?:TOBACCO|DISCOUNT)\b", z, re.I):
+    if re.search(r"\bNO[\s_-]*(?:TOBACCO|DISCOUNT)", z, re.I):
         return "OPT-OUT"
 
-    elections = [
-        ("Enhanced Margin", re.compile(r"(?<![A-Z])ENHANCED(?:\s*[_-]?\s*MARGIN|\s*\d+)?(?![A-Z])", re.I)),
-        ("Blended", re.compile(r"(?<![A-Z])BLENDED(?![A-Z])", re.I)),
-        ("Reserve", re.compile(r"(?<![A-Z])RESERVE(?![A-Z])", re.I)),
-        ("Balanced", re.compile(r"(?<![A-Z])BALANCED(?![A-Z])", re.I)),
-        ("Margin", re.compile(r"(?<![A-Z])MARGIN(?![A-Z])", re.I)),
-        ("CVF", re.compile(r"(?<![A-Z])CVF(?![A-Z])", re.I)),
+    election_patterns = [
+        # Enhanced variants, including EnhanPrCam65 and EnhancedMargin.
+        (
+            "Enhanced Margin",
+            re.compile(
+                r"(?<![A-Z])ENHAN(?:CED)?(?:[_\-\s]*MARGIN)?",
+                re.I,
+            ),
+        ),
+        # Blended may be followed immediately by zone text.
+        ("Blended", re.compile(r"(?<![A-Z])BLENDED", re.I)),
+        # Reserve may be followed immediately by zone text, e.g. ReserveCamSLP.
+        ("Reserve", re.compile(r"(?<![A-Z])RESERVE", re.I)),
+        # Balanced shorthand appears as BalPremCamel.
+        ("Balanced", re.compile(r"(?<![A-Z])BAL(?:ANCED)?", re.I)),
+        ("Margin", re.compile(r"(?<![A-Z])MARGIN", re.I)),
+        ("CVF", re.compile(r"(?<![A-Z])CVF", re.I)),
     ]
 
-    state_matches = list(
-        re.finditer(r"(?<![A-Z])([A-Z]{2})(?![A-Z])", z.upper())
-    )
+    valid_states = {
+        "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN",
+        "IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV",
+        "NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN",
+        "TX","UT","VT","VA","WA","WV","WI","WY","DC",
+    }
 
-    if state_matches:
-        after_state = z[state_matches[0].end():]
-        matches = []
+    state_matches = [
+        m for m in re.finditer(r"(?<![A-Z])([A-Z]{2})(?![A-Z])", z.upper())
+        if m.group(1) in valid_states
+    ]
 
-        for label, pattern in elections:
-            match = pattern.search(after_state)
-            if match:
-                matches.append((match.start(), label))
+    search_text = z[state_matches[0].end():] if state_matches else z
 
-        if matches:
-            return min(matches, key=lambda x: x[0])[1]
-
-    matches = []
-    for label, pattern in elections:
-        match = pattern.search(z)
+    candidates = []
+    for label, pattern in election_patterns:
+        match = pattern.search(search_text)
         if match:
-            matches.append((match.start(), label))
+            candidates.append((match.start(), label))
 
-    return min(matches, key=lambda x: x[0])[1] if matches else ""
+    if not candidates:
+        return ""
+
+    return min(candidates, key=lambda item: item[0])[1]
 
 
 def normalize_election(value):
