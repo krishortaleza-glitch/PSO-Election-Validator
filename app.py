@@ -7,7 +7,7 @@ import streamlit as st
 
 st.set_page_config(page_title="PSO Election Validator", page_icon="✅", layout="wide")
 
-APP_VERSION = "v1.2 — Store List Controls Output Population"
+APP_VERSION = "v1.4 — State-Aware Zone Election Extraction"
 
 
 def clean_store(value):
@@ -17,24 +17,64 @@ def clean_store(value):
 
 
 def extract_99b_election(zone):
+    """
+    Extract the 99B Election from Store List Column B (Zone).
+
+    Rules:
+      1. If the zone contains a state abbreviation, the election is the
+         first recognized election designation appearing AFTER the first
+         state abbreviation.
+      2. If there is no state abbreviation, use the first recognized election
+         designation anywhere in the zone.
+      3. Later election-like words are ignored.
+
+    This prevents examples such as:
+        MO Blended_EDLP Balanced_StL
+    from being incorrectly classified as Balanced.
+    The result is Blended.
+    """
     if pd.isna(zone):
         return ""
 
-    z = str(zone).strip().upper()
+    z = str(zone).strip()
+    if not z:
+        return ""
 
-    # Order matters for more specific names.
-    if "ENHANCED" in z:
-        return "Enhanced Margin"
-    if "RESERVE" in z:
-        return "Reserve"
-    if "BALANCED" in z:
-        return "Balanced"
-    if "BLENDED" in z:
-        return "Blended"
-    if "MARGIN" in z:
-        return "Margin"
+    if re.search(r"\bNO[\s_-]*(?:TOBACCO|DISCOUNT)\b", z, re.I):
+        return "OPT-OUT"
 
-    return ""
+    elections = [
+        ("Enhanced Margin", re.compile(r"(?<![A-Z])ENHANCED(?:\s*\d+)?(?![A-Z])", re.I)),
+        ("Blended", re.compile(r"(?<![A-Z])BLENDED(?![A-Z])", re.I)),
+        ("Reserve", re.compile(r"(?<![A-Z])RESERVE(?![A-Z])", re.I)),
+        ("Balanced", re.compile(r"(?<![A-Z])BALANCED(?![A-Z])", re.I)),
+        ("Margin", re.compile(r"(?<![A-Z])MARGIN(?![A-Z])", re.I)),
+        ("CVF", re.compile(r"(?<![A-Z])CVF(?![A-Z])", re.I)),
+    ]
+
+    state_matches = list(
+        re.finditer(r"(?<![A-Z])([A-Z]{2})(?![A-Z])", z.upper())
+    )
+
+    if state_matches:
+        after_state = z[state_matches[0].end():]
+        matches = []
+
+        for label, pattern in elections:
+            match = pattern.search(after_state)
+            if match:
+                matches.append((match.start(), label))
+
+        if matches:
+            return min(matches, key=lambda x: x[0])[1]
+
+    matches = []
+    for label, pattern in elections:
+        match = pattern.search(z)
+        if match:
+            matches.append((match.start(), label))
+
+    return min(matches, key=lambda x: x[0])[1] if matches else ""
 
 
 def normalize_election(value):
@@ -255,6 +295,10 @@ Compare the **99 Bottles store election** against the **supplier Election Report
 
 **Output population:** Only stores from the **Store List CSV** are included.  
 Stores that exist only in the Election Report are ignored.
+
+**99B election extraction:** If the Zone contains a state, the first recognized
+election after that state is used. If there is no state, the first recognized
+election in the Zone is used.
 
 **Duplicate Election Report rows:** Duplicate rows for the same store are collapsed and do not create a separate status.
 """
