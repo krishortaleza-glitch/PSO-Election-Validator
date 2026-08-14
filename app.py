@@ -7,9 +7,6 @@ import streamlit as st
 
 st.set_page_config(page_title="PSO Election Validator", page_icon="✅", layout="wide")
 
-APP_VERSION = "v1.5 — Simplified Interface"
-
-
 def clean_store(value):
     if pd.isna(value):
         return ""
